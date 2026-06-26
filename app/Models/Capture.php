@@ -1,0 +1,113 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Arr;
+
+class Capture extends Model
+{
+    public const TYPE_QUICK = 'quick';
+
+    public const TYPE_TASK = 'task';
+
+    public const TYPE_IDEA = 'idea';
+
+    public const TYPE_DEV = 'dev';
+
+    public const TYPE_SCOUTS = 'scouts';
+
+    public const TYPE_WINE = 'wine';
+
+    public const TYPE_LINK = 'link';
+
+    public const TYPE_VOICE = 'voice';
+
+    public const TYPE_PHOTO = 'photo';
+
+    public const TYPE_DOCUMENT = 'document';
+
+    public const TYPE_GENERAL = 'general';
+
+    public const STATUS_PENDING = 'pending';
+
+    public const STATUS_PROCESSED = 'processed';
+
+    public const STATUS_FAILED = 'failed';
+
+    public const SUPPORTED_TYPES = [
+        self::TYPE_QUICK,
+        self::TYPE_TASK,
+        self::TYPE_IDEA,
+        self::TYPE_DEV,
+        self::TYPE_SCOUTS,
+        self::TYPE_WINE,
+        self::TYPE_LINK,
+        self::TYPE_VOICE,
+        self::TYPE_PHOTO,
+        self::TYPE_DOCUMENT,
+        self::TYPE_GENERAL,
+    ];
+
+    public const STATUSES = [
+        self::STATUS_PENDING,
+        self::STATUS_PROCESSED,
+        self::STATUS_FAILED,
+    ];
+
+    protected $fillable = [
+        'capture_id',
+        'type',
+        'title',
+        'body',
+        'url',
+        'source',
+        'status',
+        'markdown_path',
+        'media_path',
+        'media_mime',
+        'media_original_name',
+        'metadata',
+        'captured_at',
+        'processed_at',
+    ];
+
+    protected $attributes = [
+        'status' => self::STATUS_PENDING,
+    ];
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'metadata' => 'array',
+            'captured_at' => 'datetime',
+            'processed_at' => 'datetime',
+        ];
+    }
+
+    public static function normalizeType(?string $type): string
+    {
+        $normalizedType = str($type ?? self::TYPE_GENERAL)->lower()->trim()->toString();
+
+        if ($normalizedType === 'tasks') {
+            return self::TYPE_TASK;
+        }
+
+        if ($normalizedType === 'ideas') {
+            return self::TYPE_IDEA;
+        }
+
+        if ($normalizedType === 'links') {
+            return self::TYPE_LINK;
+        }
+
+        return Arr::first(
+            self::SUPPORTED_TYPES,
+            fn (string $supportedType): bool => $supportedType === $normalizedType,
+            self::TYPE_GENERAL,
+        );
+    }
+}
