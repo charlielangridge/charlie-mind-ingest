@@ -8,10 +8,10 @@ use App\Models\Capture;
 use App\Services\CaptureIdGenerator;
 use App\Services\CaptureMarkdownRenderer;
 use App\Services\CapturePathGenerator;
+use App\Services\CharlieMindStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class CaptureController extends Controller
@@ -42,6 +42,7 @@ class CaptureController extends Controller
         CaptureIdGenerator $captureIdGenerator,
         CapturePathGenerator $pathGenerator,
         CaptureMarkdownRenderer $markdownRenderer,
+        CharlieMindStorage $storage,
     ): JsonResponse {
         $validated = $request->validated();
         $type = Capture::normalizeType($validated['type'] ?? null);
@@ -57,7 +58,7 @@ class CaptureController extends Controller
 
         if ($file !== null) {
             $mediaPath = $pathGenerator->mediaPath($type, $captureId, $file);
-            Storage::disk('charliemind')->put($mediaPath, $file->getContent());
+            $storage->putUploadedFile($mediaPath, $file);
             $mediaMime = $file->getMimeType();
             $mediaOriginalName = $file->getClientOriginalName();
         }
@@ -82,7 +83,7 @@ class CaptureController extends Controller
             'captured_at' => $capturedAt,
         ]);
 
-        Storage::disk('charliemind')->put($capture->markdown_path, $markdownRenderer->render($capture));
+        $storage->putVaultFile($capture->markdown_path, $markdownRenderer->render($capture));
 
         return response()->json([
             'success' => true,

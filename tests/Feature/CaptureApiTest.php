@@ -9,9 +9,13 @@ use Illuminate\Support\Facades\Storage;
 uses(RefreshDatabase::class);
 
 beforeEach(function (): void {
-    config(['charliemind.capture_api_token' => 'test-token']);
+    config([
+        'charliemind.capture_api_token' => 'test-token',
+        'charliemind.disk' => 'local',
+        'charliemind.root' => 'charliemind',
+    ]);
 
-    Storage::fake('charliemind');
+    Storage::fake('local');
 });
 
 function captureAuthHeaders(): array
@@ -49,8 +53,10 @@ test('authenticated text capture succeeds', function () {
 
     expect($capture->markdown_path)->toStartWith('inbox/captures/ideas/');
 
-    Storage::disk('charliemind')->assertExists($capture->markdown_path);
-    expect(Storage::disk('charliemind')->get($capture->markdown_path))
+    expect($capture->markdown_path)->not->toStartWith('charliemind/');
+
+    Storage::disk('local')->assertExists('charliemind/'.$capture->markdown_path);
+    expect(Storage::disk('local')->get('charliemind/'.$capture->markdown_path))
         ->toContain('capture_id: '.$capture->capture_id)
         ->toContain('# Idea')
         ->toContain('Idea for DoorScan');
@@ -92,7 +98,7 @@ test('task capture creates a markdown task', function () {
     ], captureAuthHeaders());
 
     $capture = Capture::query()->findOrFail($response->json('capture.id'));
-    $markdown = Storage::disk('charliemind')->get($capture->markdown_path);
+    $markdown = Storage::disk('local')->get('charliemind/'.$capture->markdown_path);
 
     expect($markdown)->toContain('- [ ] Call Dylan about Martin Audio pricing.');
 });
@@ -106,7 +112,7 @@ test('link capture includes the URL', function () {
     ], captureAuthHeaders());
 
     $capture = Capture::query()->findOrFail($response->json('capture.id'));
-    $markdown = Storage::disk('charliemind')->get($capture->markdown_path);
+    $markdown = Storage::disk('local')->get('charliemind/'.$capture->markdown_path);
 
     expect($markdown)
         ->toContain('[Interesting Laravel package](https://example.com)')
@@ -127,9 +133,10 @@ test('voice capture with file stores audio and creates markdown embed', function
     $capture = Capture::query()->findOrFail($response->json('capture.id'));
 
     expect($capture->media_path)->toBe('inbox/audio/'.$capture->capture_id.'.m4a');
-    Storage::disk('charliemind')->assertExists($capture->media_path);
-    expect(Storage::disk('charliemind')->get($capture->markdown_path))
+    Storage::disk('local')->assertExists('charliemind/'.$capture->media_path);
+    expect(Storage::disk('local')->get('charliemind/'.$capture->markdown_path))
         ->toContain('![[inbox/audio/'.$capture->capture_id.'.m4a]]')
+        ->not->toContain('![[charliemind/inbox/audio/'.$capture->capture_id.'.m4a]]')
         ->toContain('#mobile-capture #voice #audio');
 });
 
@@ -166,8 +173,8 @@ test('cherri file request captures multipart payloads and file at the captures e
         ->and($capture->media_original_name)->toBe('meeting-audio.m4a')
         ->and($capture->media_path)->toBe('inbox/audio/'.$capture->capture_id.'.m4a');
 
-    Storage::disk('charliemind')->assertExists($capture->media_path);
-    Storage::disk('charliemind')->assertExists($capture->markdown_path);
+    Storage::disk('local')->assertExists('charliemind/'.$capture->media_path);
+    Storage::disk('local')->assertExists('charliemind/'.$capture->markdown_path);
 });
 
 test('photo capture with file stores image and creates markdown embed', function () {
@@ -184,8 +191,8 @@ test('photo capture with file stores image and creates markdown embed', function
     $capture = Capture::query()->findOrFail($response->json('capture.id'));
 
     expect($capture->media_path)->toBe('inbox/media/photos/'.$capture->capture_id.'.jpg');
-    Storage::disk('charliemind')->assertExists($capture->media_path);
-    expect(Storage::disk('charliemind')->get($capture->markdown_path))
+    Storage::disk('local')->assertExists('charliemind/'.$capture->media_path);
+    expect(Storage::disk('local')->get('charliemind/'.$capture->markdown_path))
         ->toContain('![[inbox/media/photos/'.$capture->capture_id.'.jpg]]')
         ->toContain('Rack wiring photo from site visit');
 });
