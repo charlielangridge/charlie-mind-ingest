@@ -69,6 +69,29 @@ test('processes a pending text capture and preserves the raw file', function () 
         ->toContain('Original capture: [['.$capture->markdown_path.']]');
 });
 
+test('processes raw markdown front matter without requiring symfony yaml', function () {
+    $capture = pendingCapture(markdown: <<<'MARKDOWN'
+---
+created: 2026-06-26 17:13
+capture_id: 2026-06-26-161905
+processed: false
+tags:
+  - mobile-capture
+  - idea
+---
+
+# Idea
+
+Front matter should not require an optional parser package.
+MARKDOWN);
+
+    $this->artisan('captures:process --dry-run')
+        ->expectsOutput('Dry run: processing 1 captures...')
+        ->assertSuccessful();
+
+    expect($capture->refresh()->status)->toBe(Capture::STATUS_PENDING);
+});
+
 test('task captures create markdown checklist items', function () {
     $capture = pendingCapture([
         'capture_id' => '2026-06-26-161906',
