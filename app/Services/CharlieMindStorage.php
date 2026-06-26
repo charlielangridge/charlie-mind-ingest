@@ -72,6 +72,24 @@ class CharlieMindStorage
         return $this->disk()->get($this->objectPath($vaultRelativePath));
     }
 
+    public function size(string $vaultRelativePath): ?int
+    {
+        try {
+            return $this->disk()->size($this->objectPath($vaultRelativePath));
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    public function mimeType(string $vaultRelativePath): ?string
+    {
+        try {
+            return $this->disk()->mimeType($this->objectPath($vaultRelativePath));
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
     public function delete(string $vaultRelativePath): bool
     {
         return $this->disk()->delete($this->objectPath($vaultRelativePath));
