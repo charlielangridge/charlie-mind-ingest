@@ -49,7 +49,7 @@ storage/app/charliemind
 
 ## Authentication
 
-All capture endpoints require bearer-token auth:
+All capture and export endpoints require bearer-token auth:
 
 ```http
 Authorization: Bearer change-me
@@ -70,6 +70,9 @@ Missing or invalid tokens return:
 POST /api/captures
 GET /api/captures
 GET /api/captures/{capture_id}
+GET /api/exports/pending
+GET /api/exports/file
+POST /api/exports/mark-complete
 ```
 
 `GET /api/captures` supports:
@@ -79,6 +82,129 @@ GET /api/captures/{capture_id}
 ?type=voice
 ?limit=50
 ```
+
+## Obsidian Export Pull Bridge
+
+Processed notes are stored in the configured Laravel Cloud bucket. Obsidian Sync does not read from that bucket directly, so the bridge is:
+
+```text
+Laravel Cloud bucket
+  -> desktop puller
+  -> local Obsidian vault folder
+  -> Obsidian Sync
+```
+
+The Laravel app remains the capture and processing system. A local desktop or laptop pulls processed files into the vault. Bucket files are not deleted after export.
+
+### Export API
+
+List pending processed captures:
+
+```http
+GET /api/exports/pending?limit=50&include_raw=false
+```
+
+The response contains vault-relative paths only:
+
+```json
+{
+  "exports": [
+    {
+      "capture_id": "2026-06-26-161905",
+      "type": "voice",
+      "status": "processed",
+      "needs_review": true,
+      "review_reason": "low-confidence",
+      "processed_markdown_path": "Review/2026-06-26 - unclear voice note.md",
+      "files": [
+        {
+          "role": "processed_note",
+          "path": "Review/2026-06-26 - unclear voice note.md",
+          "mime": "text/markdown",
+          "size": 2451
+        }
+      ]
+    }
+  ]
+}
+```
+
+Download one export file:
+
+```http
+GET /api/exports/file?path=Review%2F2026-06-26%20-%20unclear%20voice%20note.md
+```
+
+Mark successfully pulled captures as exported:
+
+```http
+POST /api/exports/mark-complete
+Content-Type: application/json
+
+{
+  "capture_ids": ["2026-06-26-161905"]
+}
+```
+
+### Local Puller Setup
+
+Copy the example config:
+
+```bash
+cp tools/.env.example tools/.env
+```
+
+Set your local values:
+
+```env
+CHARLIEMIND_API_URL=https://capture.example.com
+CHARLIEMIND_API_TOKEN=change-me
+CHARLIEMIND_LOCAL_VAULT_PATH=C:\Users\charl\CharlieMind
+```
+
+Run a dry run first:
+
+```bash
+php tools/charliemind-pull.php --dry-run
+```
+
+Pull pending processed files:
+
+```bash
+php tools/charliemind-pull.php
+```
+
+Useful options:
+
+```bash
+php tools/charliemind-pull.php --limit=20
+php tools/charliemind-pull.php --force
+php tools/charliemind-pull.php --include-raw
+```
+
+By default, existing local files are skipped and still count as present for that capture. Use `--force` to overwrite them. A capture is marked exported only when every required file for that capture was downloaded or already existed locally. Dry runs never write files or mark captures exported.
+
+### Windows Task Scheduler
+
+Create a basic task that runs on your preferred interval:
+
+```text
+Program:
+php
+
+Arguments:
+C:\path\to\charlie-mind-ingest\tools\charliemind-pull.php
+
+Start in:
+C:\path\to\charlie-mind-ingest
+```
+
+Known v1 limitations:
+
+- Export uses the same static bearer token as capture ingestion.
+- Server-side export failure tracking is reserved for future use; local pull failures are reported by the puller.
+- The puller is manual or externally scheduled; the Laravel app does not push files to the desktop.
+- Raw capture Markdown is excluded unless `include_raw=true` or `--include-raw` is used.
 
 ## Text Capture
 

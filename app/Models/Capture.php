@@ -39,6 +39,14 @@ class Capture extends Model
 
     public const STATUS_SKIPPED = 'skipped';
 
+    public const EXPORT_STATUS_PENDING = 'pending';
+
+    public const EXPORT_STATUS_EXPORTED = 'exported';
+
+    public const EXPORT_STATUS_FAILED = 'failed';
+
+    public const EXPORT_STATUS_SKIPPED = 'skipped';
+
     public const SUPPORTED_TYPES = [
         self::TYPE_QUICK,
         self::TYPE_TASK,
@@ -59,6 +67,13 @@ class Capture extends Model
         self::STATUS_PROCESSED,
         self::STATUS_FAILED,
         self::STATUS_SKIPPED,
+    ];
+
+    public const EXPORT_STATUSES = [
+        self::EXPORT_STATUS_PENDING,
+        self::EXPORT_STATUS_EXPORTED,
+        self::EXPORT_STATUS_FAILED,
+        self::EXPORT_STATUS_SKIPPED,
     ];
 
     protected $fillable = [
@@ -87,12 +102,18 @@ class Capture extends Model
         'needs_review',
         'review_reason',
         'reviewed_at',
+        'export_status',
+        'exported_at',
+        'export_attempts',
+        'export_error',
+        'last_export_attempt_at',
     ];
 
     protected $attributes = [
         'status' => self::STATUS_PENDING,
         'processing_attempts' => 0,
         'needs_review' => false,
+        'export_attempts' => 0,
     ];
 
     /**
@@ -108,6 +129,8 @@ class Capture extends Model
             'processed_at' => 'datetime',
             'needs_review' => 'boolean',
             'reviewed_at' => 'datetime',
+            'exported_at' => 'datetime',
+            'last_export_attempt_at' => 'datetime',
         ];
     }
 
