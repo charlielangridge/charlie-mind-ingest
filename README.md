@@ -34,6 +34,11 @@ OPENAI_TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
 CAPTURE_PROCESSOR_DRY_RUN=false
 CAPTURE_PROCESSOR_MAX_PER_RUN=20
 CAPTURE_PROCESSOR_ARCHIVE_RAW=false
+CAPTURE_PROCESSOR_REVIEW_MODE=confidence
+CAPTURE_PROCESSOR_REVIEW_CONFIDENCE_THRESHOLD=low
+CAPTURE_PROCESSOR_MEDIUM_REVIEW_TAG=true
+CAPTURE_PROCESSOR_REVIEW_FOLDER=Review
+CAPTURE_PROCESSOR_REVIEW_INDEX=Review/_Review Index.md
 ```
 
 `CHARLIEMIND_STORAGE_ROOT=charliemind` writes files under:
@@ -150,7 +155,7 @@ Without an OpenAI key, text captures still process locally using deterministic f
 - title from the first sentence or first 8 words
 - checklist extraction for task captures
 - sparse tags
-- `confidence: low`
+- `confidence: low`, which sends the processed note to review mode by default
 
 ### Voice Processing
 
@@ -178,6 +183,40 @@ The database stores these paths in `processed_markdown_path` without the configu
 
 Raw captures are preserved in place. V1 does not delete, move, or archive raw inbox files, even when `CAPTURE_PROCESSOR_ARCHIVE_RAW` is set.
 
+### Review Mode
+
+Review mode protects the permanent vault folders from uncertain processed notes. It is enabled by default with:
+
+```env
+CAPTURE_PROCESSOR_REVIEW_MODE=confidence
+CAPTURE_PROCESSOR_REVIEW_CONFIDENCE_THRESHOLD=low
+CAPTURE_PROCESSOR_MEDIUM_REVIEW_TAG=true
+CAPTURE_PROCESSOR_REVIEW_FOLDER=Review
+CAPTURE_PROCESSOR_REVIEW_INDEX=Review/_Review Index.md
+```
+
+Confidence routing:
+
+- `high` writes directly to the AI-suggested folder.
+- `medium` writes to the AI-suggested folder, adds `needs_review: true`, `review_reason: medium-confidence`, and `#needs-review`.
+- `low` writes to `Review/`, adds `needs_review: true`, `review_reason: low-confidence`, and `#needs-review`.
+
+`CAPTURE_PROCESSOR_REVIEW_CONFIDENCE_THRESHOLD` uses ordered confidence values: `low < medium < high`. The default `low` sends only low-confidence captures to `Review/`. Setting it to `medium` sends low and medium captures to `Review/`.
+
+To preserve the old behavior and always use the suggested folder:
+
+```env
+CAPTURE_PROCESSOR_REVIEW_MODE=off
+```
+
+The review index is maintained at:
+
+```text
+Review/_Review Index.md
+```
+
+It contains Obsidian wiki-link checklist entries for notes that need review. Review notes manually in Obsidian by opening the index, checking each linked note, editing or moving it as needed, then ticking off the checklist item. This is intentionally not a full approval workflow.
+
 ### Processing Log
 
 Each non-dry-run processing pass appends a summary to:
@@ -187,6 +226,12 @@ inbox/processing-log.md
 ```
 
 The log is written through `CharlieMindStorage`, so it uses the same configured disk and root as capture files.
+
+Reviewed captures are marked in the log with a warning symbol and review reason. You can also list processed captures that need review with:
+
+```bash
+php artisan captures:review-list
+```
 
 ### Current Limitations
 

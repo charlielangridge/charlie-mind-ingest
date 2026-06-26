@@ -50,13 +50,14 @@ class CapturesProcessCommand extends Command
         $processed = collect($outcomes)->where('status', Capture::STATUS_PROCESSED)->count();
         $failed = collect($outcomes)->filter->failed()->count();
         $skipped = collect($outcomes)->where('status', Capture::STATUS_SKIPPED)->count();
+        $needsReview = collect($outcomes)->where('needsReview', true)->count();
 
         if (! $dryRun) {
-            $this->appendProcessingLog($storage, $outcomes, $processed, $failed, $skipped);
+            $this->appendProcessingLog($storage, $outcomes, $processed, $failed, $skipped, $needsReview);
         }
 
         $this->newLine();
-        $this->line("Done. Processed: {$processed}. Failed: {$failed}. Skipped: {$skipped}.");
+        $this->line("Done. Processed: {$processed}. Failed: {$failed}. Skipped: {$skipped}. Needs review: {$needsReview}.");
 
         return $failed > 0 ? self::FAILURE : self::SUCCESS;
     }
@@ -120,16 +121,17 @@ class CapturesProcessCommand extends Command
             return;
         }
 
-        $prefix = $dryRun ? '-' : '✓';
+        $prefix = $dryRun ? '-' : ($outcome->needsReview ? '⚠' : '✓');
         $label = $dryRun ? 'would write '.$outcome->processedPath : $outcome->processedPath;
+        $review = $outcome->needsReview ? ' needs review: '.$outcome->reviewReason : '';
 
-        $this->line("{$prefix} {$capture->capture_id} {$capture->type} → {$label}");
+        $this->line("{$prefix} {$capture->capture_id} {$capture->type} → {$label}{$review}");
     }
 
     /**
      * @param  array<int, CaptureProcessingOutcome>  $outcomes
      */
-    private function appendProcessingLog(CharlieMindStorage $storage, array $outcomes, int $processed, int $failed, int $skipped): void
+    private function appendProcessingLog(CharlieMindStorage $storage, array $outcomes, int $processed, int $failed, int $skipped, int $needsReview): void
     {
         $lines = [
             '',
@@ -138,6 +140,7 @@ class CapturesProcessCommand extends Command
             'Processed: '.$processed,
             'Failed: '.$failed,
             'Skipped: '.$skipped,
+            'Needs review: '.$needsReview,
             '',
         ];
 
@@ -146,6 +149,8 @@ class CapturesProcessCommand extends Command
 
             if ($outcome->failed()) {
                 $lines[] = "- ✗ {$capture->capture_id} failed: {$outcome->message}";
+            } elseif ($outcome->needsReview) {
+                $lines[] = "- ⚠ {$capture->capture_id} → {$outcome->processedPath} {$outcome->reviewReason}";
             } else {
                 $lines[] = "- ✓ {$capture->capture_id} → {$outcome->processedPath}";
             }

@@ -11,10 +11,10 @@ class ProcessedNotePathGenerator
         private CharlieMindStorage $storage,
     ) {}
 
-    public function pathFor(Capture $capture, CaptureProcessingResult $result): string
+    public function pathFor(Capture $capture, CaptureProcessingResult $result, string $folder): string
     {
         $date = ($capture->captured_at ?? $capture->created_at ?? now())->format('Y-m-d');
-        $folder = trim($result->folder, '/');
+        $folder = trim($folder, '/') ?: 'Notes';
         $title = $this->filenameTitle($result->title !== '' ? $result->title : 'captured note');
         $basePath = "{$folder}/{$date} - {$title}.md";
 

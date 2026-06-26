@@ -11,8 +11,10 @@ class CaptureProcessor
         private CaptureContentExtractor $extractor,
         private CaptureTranscriber $transcriber,
         private CaptureAiProcessor $aiProcessor,
+        private CaptureReviewRouter $reviewRouter,
         private ProcessedNoteRenderer $renderer,
         private ProcessedNotePathGenerator $pathGenerator,
+        private ReviewIndexWriter $reviewIndexWriter,
         private CharlieMindStorage $storage,
     ) {}
 
@@ -35,20 +37,25 @@ class CaptureProcessor
             }
 
             $result = $this->aiProcessor->process($capture, $content);
-            $processedPath = $this->pathGenerator->pathFor($capture, $result);
+            $reviewRoute = $this->reviewRouter->route($capture, $result);
+            $processedPath = $this->pathGenerator->pathFor($capture, $result, $reviewRoute->folder);
 
             if ($dryRun) {
                 return new CaptureProcessingOutcome(
                     capture: $capture,
                     status: 'dry-run',
                     processedPath: $processedPath,
+                    needsReview: $reviewRoute->needsReview,
+                    reviewReason: $reviewRoute->reviewReason,
                 );
             }
 
             $this->storage->putVaultFile(
                 $processedPath,
-                $this->renderer->render($capture, $content, $result),
+                $this->renderer->render($capture, $content, $result, $reviewRoute),
             );
+
+            $this->reviewIndexWriter->append($capture, $result, $reviewRoute, $processedPath);
 
             $capture->forceFill([
                 'status' => Capture::STATUS_PROCESSED,
@@ -56,7 +63,9 @@ class CaptureProcessor
                 'processed_at' => now(),
                 'summary' => $result->summary,
                 'suggested_title' => $result->title,
-                'suggested_tags' => $result->tags,
+                'suggested_tags' => $reviewRoute->tags,
+                'needs_review' => $reviewRoute->needsReview,
+                'review_reason' => $reviewRoute->reviewReason,
                 'transcript' => $content->transcript,
                 'processing_error' => null,
             ])->save();
@@ -65,6 +74,8 @@ class CaptureProcessor
                 capture: $capture,
                 status: Capture::STATUS_PROCESSED,
                 processedPath: $processedPath,
+                needsReview: $reviewRoute->needsReview,
+                reviewReason: $reviewRoute->reviewReason,
             );
         } catch (Throwable $throwable) {
             if (! $dryRun) {

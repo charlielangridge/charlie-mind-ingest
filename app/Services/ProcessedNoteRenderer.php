@@ -6,11 +6,12 @@ use App\Models\Capture;
 
 class ProcessedNoteRenderer
 {
-    public function render(Capture $capture, CaptureContent $content, CaptureProcessingResult $result): string
+    public function render(Capture $capture, CaptureContent $content, CaptureProcessingResult $result, CaptureReviewRoute $reviewRoute): string
     {
         return implode(PHP_EOL.PHP_EOL, array_filter([
-            $this->frontMatter($capture, $result),
+            $this->frontMatter($capture, $result, $reviewRoute),
             '# '.$result->title,
+            $this->reviewTag($reviewRoute),
             $this->summary($result),
             $this->actions($result),
             $this->notes($result),
@@ -19,10 +20,10 @@ class ProcessedNoteRenderer
         ])).PHP_EOL;
     }
 
-    private function frontMatter(Capture $capture, CaptureProcessingResult $result): string
+    private function frontMatter(Capture $capture, CaptureProcessingResult $result, CaptureReviewRoute $reviewRoute): string
     {
         $created = ($capture->captured_at ?? $capture->created_at ?? now())->format('Y-m-d H:i');
-        $tags = array_values(array_unique(array_filter(array_merge(['mobile-capture', $capture->type], $result->tags))));
+        $tags = array_values(array_unique(array_filter($reviewRoute->tags)));
 
         $lines = [
             '---',
@@ -33,8 +34,14 @@ class ProcessedNoteRenderer
             'original_type: '.$capture->type,
             'processed: true',
             'confidence: '.$result->confidence,
-            'tags:',
+            'needs_review: '.($reviewRoute->needsReview ? 'true' : 'false'),
         ];
+
+        if ($reviewRoute->reviewReason !== null) {
+            $lines[] = 'review_reason: '.$reviewRoute->reviewReason;
+        }
+
+        $lines[] = 'tags:';
 
         foreach ($tags as $tag) {
             $lines[] = '  - '.$this->tag($tag);
@@ -43,6 +50,11 @@ class ProcessedNoteRenderer
         $lines[] = '---';
 
         return implode(PHP_EOL, $lines);
+    }
+
+    private function reviewTag(CaptureReviewRoute $reviewRoute): string
+    {
+        return $reviewRoute->needsReview ? '#needs-review' : '';
     }
 
     private function summary(CaptureProcessingResult $result): string

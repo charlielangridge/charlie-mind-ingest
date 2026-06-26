@@ -84,11 +84,15 @@ class Capture extends Model
         'summary',
         'suggested_title',
         'suggested_tags',
+        'needs_review',
+        'review_reason',
+        'reviewed_at',
     ];
 
     protected $attributes = [
         'status' => self::STATUS_PENDING,
         'processing_attempts' => 0,
+        'needs_review' => false,
     ];
 
     /**
@@ -102,6 +106,8 @@ class Capture extends Model
             'captured_at' => 'datetime',
             'processing_started_at' => 'datetime',
             'processed_at' => 'datetime',
+            'needs_review' => 'boolean',
+            'reviewed_at' => 'datetime',
         ];
     }
 

@@ -14,6 +14,8 @@ class CaptureProcessingOutcome
         public string $status,
         public ?string $processedPath = null,
         public ?string $message = null,
+        public bool $needsReview = false,
+        public ?string $reviewReason = null,
     ) {}
 
     public function failed(): bool
