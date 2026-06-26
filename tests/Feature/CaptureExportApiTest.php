@@ -12,6 +12,11 @@ beforeEach(function (): void {
         'charliemind.capture_api_token' => 'test-token',
         'charliemind.disk' => 'local',
         'charliemind.root' => 'charliemind',
+        'charliemind.staging_processed_folder' => 'inbox/mobile-captures/processed',
+        'charliemind.staging_review_folder' => 'inbox/mobile-captures/review',
+        'charliemind.staging_audio_folder' => 'inbox/mobile-captures/audio',
+        'charliemind.staging_media_folder' => 'inbox/mobile-captures/media',
+        'charliemind.staging_raw_folder' => 'inbox/mobile-captures/raw',
     ]);
 
     Storage::fake('local');
@@ -37,15 +42,18 @@ function exportCapture(array $attributes = []): Capture
         'type' => Capture::TYPE_VOICE,
         'status' => Capture::STATUS_PROCESSED,
         'markdown_path' => 'inbox/voice/2026-06-26-161905.md',
-        'processed_markdown_path' => 'Review/2026-06-26 - unclear voice note.md',
-        'media_path' => 'inbox/audio/2026-06-26-161905.m4a',
+        'processed_markdown_path' => 'inbox/mobile-captures/review/2026-06-26 - unclear voice note.md',
+        'media_path' => 'inbox/mobile-captures/audio/2026-06-26-161905.m4a',
         'media_mime' => 'audio/mp4',
         'processed_at' => '2026-06-26 17:10:00',
         'needs_review' => true,
         'review_reason' => 'low-confidence',
+        'suggested_folder' => 'Voice',
+        'suggested_path' => 'Voice/2026-06-26 - unclear voice note.md',
     ], $attributes));
 
     Storage::disk('local')->put('charliemind/'.$capture->markdown_path, '# Raw Voice');
+    Storage::disk('local')->put('charliemind/inbox/mobile-captures/raw/'.$capture->capture_id.'.md', '# Raw Voice');
 
     if ($capture->processed_markdown_path !== null) {
         Storage::disk('local')->put('charliemind/'.$capture->processed_markdown_path, '# Processed Voice');
@@ -92,11 +100,13 @@ test('export manifest includes processed markdown and media files', function () 
 
     $this->getJson('/api/exports/pending', exportAuthHeaders())
         ->assertSuccessful()
-        ->assertJsonPath('exports.0.processed_markdown_path', 'Review/2026-06-26 - unclear voice note.md')
+        ->assertJsonPath('exports.0.processed_markdown_path', 'inbox/mobile-captures/review/2026-06-26 - unclear voice note.md')
+        ->assertJsonPath('exports.0.suggested_folder', 'Voice')
+        ->assertJsonPath('exports.0.suggested_path', 'Voice/2026-06-26 - unclear voice note.md')
         ->assertJsonPath('exports.0.files.0.role', 'processed_note')
-        ->assertJsonPath('exports.0.files.0.path', 'Review/2026-06-26 - unclear voice note.md')
+        ->assertJsonPath('exports.0.files.0.path', 'inbox/mobile-captures/review/2026-06-26 - unclear voice note.md')
         ->assertJsonPath('exports.0.files.1.role', 'media')
-        ->assertJsonPath('exports.0.files.1.path', 'inbox/audio/2026-06-26-161905.m4a');
+        ->assertJsonPath('exports.0.files.1.path', 'inbox/mobile-captures/audio/2026-06-26-161905.m4a');
 });
 
 test('export manifest includes raw markdown when requested', function () {
@@ -107,12 +117,15 @@ test('export manifest includes raw markdown when requested', function () {
 
     expect(collect($response->json('exports.0.files'))->pluck('role')->all())
         ->toContain('raw_capture');
+
+    expect(collect($response->json('exports.0.files'))->firstWhere('role', 'raw_capture')['path'])
+        ->toBe('inbox/mobile-captures/raw/2026-06-26-161905.md');
 });
 
 test('export file endpoint downloads markdown', function () {
     exportCapture();
 
-    $this->get('/api/exports/file?path='.urlencode('Review/2026-06-26 - unclear voice note.md'), exportAuthHeaders())
+    $this->get('/api/exports/file?path='.urlencode('inbox/mobile-captures/review/2026-06-26 - unclear voice note.md'), exportAuthHeaders())
         ->assertSuccessful()
         ->assertHeader('content-type', 'text/markdown; charset=UTF-8')
         ->assertContent('# Processed Voice');
@@ -121,10 +134,19 @@ test('export file endpoint downloads markdown', function () {
 test('export file endpoint downloads binary media', function () {
     exportCapture();
 
-    $response = $this->get('/api/exports/file?path='.urlencode('inbox/audio/2026-06-26-161905.m4a'), exportAuthHeaders())
+    $response = $this->get('/api/exports/file?path='.urlencode('inbox/mobile-captures/audio/2026-06-26-161905.m4a'), exportAuthHeaders())
         ->assertSuccessful();
 
     expect($response->getContent())->toBe("\x00\x01audio");
+});
+
+test('export file endpoint downloads staged raw markdown', function () {
+    exportCapture();
+
+    $this->get('/api/exports/file?path='.urlencode('inbox/mobile-captures/raw/2026-06-26-161905.md'), exportAuthHeaders())
+        ->assertSuccessful()
+        ->assertHeader('content-type', 'text/markdown; charset=UTF-8')
+        ->assertContent('# Raw Voice');
 });
 
 test('export file endpoint rejects unsafe paths', function (string $path) {

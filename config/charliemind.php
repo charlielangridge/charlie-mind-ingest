@@ -13,6 +13,13 @@ return [
     'processor_medium_review_tag' => filter_var(env('CAPTURE_PROCESSOR_MEDIUM_REVIEW_TAG', true), FILTER_VALIDATE_BOOLEAN),
     'processor_review_folder' => trim(env('CAPTURE_PROCESSOR_REVIEW_FOLDER', 'Review'), '/'),
     'processor_review_index' => trim(env('CAPTURE_PROCESSOR_REVIEW_INDEX', 'Review/_Review Index.md'), '/'),
+    'staging_root' => trim(env('CHARLIEMIND_STAGING_ROOT', 'inbox/mobile-captures'), '/'),
+    'staging_processed_folder' => trim(env('CHARLIEMIND_STAGING_PROCESSED_FOLDER', 'inbox/mobile-captures/processed'), '/'),
+    'staging_review_folder' => trim(env('CHARLIEMIND_STAGING_REVIEW_FOLDER', 'inbox/mobile-captures/review'), '/'),
+    'staging_audio_folder' => trim(env('CHARLIEMIND_STAGING_AUDIO_FOLDER', 'inbox/mobile-captures/audio'), '/'),
+    'staging_media_folder' => trim(env('CHARLIEMIND_STAGING_MEDIA_FOLDER', 'inbox/mobile-captures/media'), '/'),
+    'staging_raw_folder' => trim(env('CHARLIEMIND_STAGING_RAW_FOLDER', 'inbox/mobile-captures/raw'), '/'),
+    'staging_log_folder' => trim(env('CHARLIEMIND_STAGING_LOG_FOLDER', 'inbox/mobile-captures/logs'), '/'),
     'openai_text_model' => env('OPENAI_TEXT_MODEL', 'gpt-4.1-mini'),
     'openai_transcription_model' => env('OPENAI_TRANSCRIPTION_MODEL', 'gpt-4o-mini-transcribe'),
 ];

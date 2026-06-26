@@ -25,6 +25,13 @@ beforeEach(function (): void {
         'charliemind.processor_medium_review_tag' => true,
         'charliemind.processor_review_folder' => 'Review',
         'charliemind.processor_review_index' => 'Review/_Review Index.md',
+        'charliemind.staging_root' => 'inbox/mobile-captures',
+        'charliemind.staging_processed_folder' => 'inbox/mobile-captures/processed',
+        'charliemind.staging_review_folder' => 'inbox/mobile-captures/review',
+        'charliemind.staging_audio_folder' => 'inbox/mobile-captures/audio',
+        'charliemind.staging_media_folder' => 'inbox/mobile-captures/media',
+        'charliemind.staging_raw_folder' => 'inbox/mobile-captures/raw',
+        'charliemind.staging_log_folder' => 'inbox/mobile-captures/logs',
     ]);
 
     Storage::fake('local');
@@ -81,24 +88,29 @@ test('processes a pending text capture and preserves the raw file', function () 
     $capture->refresh();
 
     expect($capture->status)->toBe(Capture::STATUS_PROCESSED)
-        ->and($capture->processed_markdown_path)->toBe('Review/2026-06-26 - doorscan queue length estimation from recent scans.md')
+        ->and($capture->processed_markdown_path)->toBe('inbox/mobile-captures/review/2026-06-26 - doorscan queue length estimation from recent scans.md')
         ->and($capture->summary)->toContain('DoorScan queue length estimation')
         ->and($capture->suggested_title)->toBe('Doorscan Queue Length Estimation From Recent Scans')
+        ->and($capture->suggested_folder)->toBe('Ideas')
+        ->and($capture->suggested_path)->toBe('Ideas/2026-06-26 - doorscan queue length estimation from recent scans.md')
         ->and($capture->needs_review)->toBeTrue()
         ->and($capture->review_reason)->toBe('low-confidence');
 
     Storage::disk('local')->assertExists('charliemind/'.$capture->markdown_path);
+    Storage::disk('local')->assertExists('charliemind/inbox/mobile-captures/raw/2026-06-26-161905.md');
     Storage::disk('local')->assertExists('charliemind/'.$capture->processed_markdown_path);
 
     expect(Storage::disk('local')->get('charliemind/'.$capture->processed_markdown_path))
         ->toContain('processed: true')
         ->toContain('needs_review: true')
         ->toContain('review_reason: low-confidence')
+        ->toContain('suggested_folder: "Ideas"')
+        ->toContain('suggested_path: "Ideas/2026-06-26 - doorscan queue length estimation from recent scans.md"')
         ->toContain('[[DoorScan]]')
-        ->toContain('Original capture: [['.$capture->markdown_path.']]');
+        ->toContain('Original capture: [[inbox/mobile-captures/raw/2026-06-26-161905.md]]');
 });
 
-test('high confidence capture is filed into the suggested folder', function () {
+test('high confidence capture is staged with the suggested folder preserved', function () {
     fakeAiCaptureResult(['confidence' => 'high']);
     $capture = pendingCapture(markdown: "# Idea\n\nDoorScan queue length estimation.");
 
@@ -107,14 +119,18 @@ test('high confidence capture is filed into the suggested folder', function () {
     $capture->refresh();
     $markdown = Storage::disk('local')->get('charliemind/'.$capture->processed_markdown_path);
 
-    expect($capture->processed_markdown_path)->toBe('Ideas/2026-06-26 - doorscan queue length estimation.md')
+    expect($capture->processed_markdown_path)->toBe('inbox/mobile-captures/processed/2026-06-26 - doorscan queue length estimation.md')
+        ->and($capture->suggested_folder)->toBe('Ideas')
+        ->and($capture->suggested_path)->toBe('Ideas/2026-06-26 - doorscan queue length estimation.md')
         ->and($capture->needs_review)->toBeFalse()
         ->and($capture->review_reason)->toBeNull()
         ->and($markdown)->toContain('needs_review: false')
+        ->toContain('suggested_folder: "Ideas"')
+        ->toContain('suggested_path: "Ideas/2026-06-26 - doorscan queue length estimation.md"')
         ->not->toContain('#needs-review');
 });
 
-test('medium confidence capture stays in the suggested folder with review tags', function () {
+test('medium confidence capture is staged as processed with review tags', function () {
     fakeAiCaptureResult([
         'title' => 'Call Venue About Quote',
         'summary' => 'Call the venue about the quote.',
@@ -132,23 +148,26 @@ test('medium confidence capture stays in the suggested folder with review tags',
     ], "# Task\n\nCall venue about quote.");
 
     $this->artisan('captures:process')
-        ->expectsOutput('⚠ 2026-06-26-161905 task → Tasks/2026-06-26 - call venue about quote.md needs review: medium-confidence')
+        ->expectsOutput('⚠ 2026-06-26-161905 task → inbox/mobile-captures/processed/2026-06-26 - call venue about quote.md needs review: medium-confidence')
         ->assertSuccessful();
 
     $capture->refresh();
     $markdown = Storage::disk('local')->get('charliemind/'.$capture->processed_markdown_path);
 
-    expect($capture->processed_markdown_path)->toBe('Tasks/2026-06-26 - call venue about quote.md')
+    expect($capture->processed_markdown_path)->toBe('inbox/mobile-captures/processed/2026-06-26 - call venue about quote.md')
+        ->and($capture->suggested_folder)->toBe('Tasks')
+        ->and($capture->suggested_path)->toBe('Tasks/2026-06-26 - call venue about quote.md')
         ->and($capture->needs_review)->toBeTrue()
         ->and($capture->review_reason)->toBe('medium-confidence')
         ->and($capture->suggested_tags)->toContain('needs-review')
         ->and($markdown)->toContain('needs_review: true')
         ->toContain('review_reason: medium-confidence')
+        ->toContain('suggested_path: "Tasks/2026-06-26 - call venue about quote.md"')
         ->toContain('  - needs-review')
         ->toContain('#needs-review');
 });
 
-test('medium confidence routes to review folder when threshold is medium', function () {
+test('medium confidence remains in processed staging even when threshold is medium', function () {
     config(['charliemind.processor_review_confidence_threshold' => 'medium']);
     fakeAiCaptureResult([
         'title' => 'Maybe A Task',
@@ -162,12 +181,13 @@ test('medium confidence routes to review folder when threshold is medium', funct
 
     $this->artisan('captures:process')->assertSuccessful();
 
-    expect($capture->refresh()->processed_markdown_path)->toBe('Review/2026-06-26 - maybe a task.md')
+    expect($capture->refresh()->processed_markdown_path)->toBe('inbox/mobile-captures/processed/2026-06-26 - maybe a task.md')
+        ->and($capture->suggested_path)->toBe('Tasks/2026-06-26 - maybe a task.md')
         ->and($capture->needs_review)->toBeTrue()
         ->and($capture->review_reason)->toBe('medium-confidence');
 });
 
-test('low confidence capture is filed into review folder with review metadata', function () {
+test('low confidence capture is staged into review folder with review metadata', function () {
     fakeAiCaptureResult([
         'title' => 'Unclear Voice Note',
         'summary' => 'Unclear voice note.',
@@ -184,13 +204,15 @@ test('low confidence capture is filed into review folder with review metadata', 
     ], "# Voice Note\n\nUnclear voice note.");
 
     $this->artisan('captures:process')
-        ->expectsOutput('⚠ 2026-06-26-161905 voice → Review/2026-06-26 - unclear voice note.md needs review: low-confidence')
+        ->expectsOutput('⚠ 2026-06-26-161905 voice → inbox/mobile-captures/review/2026-06-26 - unclear voice note.md needs review: low-confidence')
         ->assertSuccessful();
 
     $capture->refresh();
     $markdown = Storage::disk('local')->get('charliemind/'.$capture->processed_markdown_path);
 
-    expect($capture->processed_markdown_path)->toBe('Review/2026-06-26 - unclear voice note.md')
+    expect($capture->processed_markdown_path)->toBe('inbox/mobile-captures/review/2026-06-26 - unclear voice note.md')
+        ->and($capture->suggested_folder)->toBe('Voice')
+        ->and($capture->suggested_path)->toBe('Voice/2026-06-26 - unclear voice note.md')
         ->and($capture->needs_review)->toBeTrue()
         ->and($capture->review_reason)->toBe('low-confidence')
         ->and($markdown)->toContain('needs_review: true')
@@ -269,9 +291,9 @@ test('dry run does not write files or update status', function () {
     expect($capture->status)->toBe(Capture::STATUS_PENDING)
         ->and($capture->processed_markdown_path)->toBeNull();
 
-    Storage::disk('local')->assertMissing('charliemind/Review/2026-06-26 - dry run body.md');
-    Storage::disk('local')->assertMissing('charliemind/inbox/processing-log.md');
-    Storage::disk('local')->assertMissing('charliemind/Review/_Review Index.md');
+    Storage::disk('local')->assertMissing('charliemind/inbox/mobile-captures/review/2026-06-26 - dry run body.md');
+    Storage::disk('local')->assertMissing('charliemind/inbox/mobile-captures/logs/processing-log.md');
+    Storage::disk('local')->assertMissing('charliemind/inbox/mobile-captures/review/_Review Index.md');
 });
 
 test('id option processes only the selected capture', function () {
@@ -312,32 +334,32 @@ test('fallback processor works without openai for text captures', function () {
 
     $capture->refresh();
 
-    expect($capture->processed_markdown_path)->toStartWith('Review/')
+    expect($capture->processed_markdown_path)->toStartWith('inbox/mobile-captures/review/')
         ->and(Storage::disk('local')->get('charliemind/'.$capture->processed_markdown_path))->toContain('[[Laravel]]');
 });
 
 test('generated filenames are safe and unique', function () {
-    Storage::disk('local')->put('charliemind/Review/2026-06-26 - duplicate title.md', 'existing');
+    Storage::disk('local')->put('charliemind/inbox/mobile-captures/review/2026-06-26 - duplicate title.md', 'existing');
 
     $capture = pendingCapture(markdown: "# Idea\n\nDuplicate title.");
 
     $this->artisan('captures:process')->assertSuccessful();
 
-    expect($capture->refresh()->processed_markdown_path)->toBe('Review/2026-06-26 - duplicate title-2.md');
+    expect($capture->refresh()->processed_markdown_path)->toBe('inbox/mobile-captures/review/2026-06-26 - duplicate title-2.md');
 });
 
 test('processing log is appended', function () {
     pendingCapture(markdown: "# Idea\n\nLogged capture.");
-    Storage::disk('local')->put('charliemind/inbox/processing-log.md', '# Existing Log'.PHP_EOL);
+    Storage::disk('local')->put('charliemind/inbox/mobile-captures/logs/processing-log.md', '# Existing Log'.PHP_EOL);
 
     $this->artisan('captures:process')->assertSuccessful();
 
-    expect(Storage::disk('local')->get('charliemind/inbox/processing-log.md'))
+    expect(Storage::disk('local')->get('charliemind/inbox/mobile-captures/logs/processing-log.md'))
         ->toContain('# Existing Log')
         ->toContain('## 2026-06-26 17:10')
         ->toContain('Processed: 1')
         ->toContain('Needs review: 1')
-        ->toContain('- ⚠ 2026-06-26-161905 → Review/2026-06-26 - logged capture.md low-confidence');
+        ->toContain('- ⚠ 2026-06-26-161905 → inbox/mobile-captures/review/2026-06-26 - logged capture.md low-confidence');
 });
 
 test('review index is created and receives medium and low confidence entries', function () {
@@ -381,12 +403,12 @@ test('review index is created and receives medium and low confidence entries', f
 
     $this->artisan('captures:process --limit=2')->assertSuccessful();
 
-    $index = Storage::disk('local')->get('charliemind/Review/_Review Index.md');
+    $index = Storage::disk('local')->get('charliemind/inbox/mobile-captures/review/_Review Index.md');
 
     expect($index)
         ->toContain('# Review Index')
-        ->toContain('- [ ] [[Review/2026-06-26 - unclear voice note]] - low-confidence, voice capture, 2026-06-26-161905')
-        ->toContain('- [ ] [[Tasks/2026-06-26 - call venue about quote]] - medium-confidence, task capture, 2026-06-26-161906');
+        ->toContain('- [ ] [[inbox/mobile-captures/review/2026-06-26 - unclear voice note]] - low-confidence, voice capture, 2026-06-26-161905')
+        ->toContain('- [ ] [[inbox/mobile-captures/processed/2026-06-26 - call venue about quote]] - medium-confidence, task capture, 2026-06-26-161906');
 });
 
 test('review index does not duplicate entries', function () {
@@ -401,22 +423,22 @@ test('review index does not duplicate entries', function () {
         confidence: 'low',
     );
     $route = new CaptureReviewRoute(
-        folder: 'Review',
+        folder: 'Voice',
         needsReview: true,
         reviewReason: 'low-confidence',
         tags: ['mobile-capture', 'voice', 'needs-review'],
     );
 
     $writer = app(ReviewIndexWriter::class);
-    $writer->append($capture, $result, $route, 'Review/2026-06-26 - unclear voice note.md');
-    $writer->append($capture, $result, $route, 'Review/2026-06-26 - unclear voice note.md');
+    $writer->append($capture, $result, $route, 'inbox/mobile-captures/review/2026-06-26 - unclear voice note.md');
+    $writer->append($capture, $result, $route, 'inbox/mobile-captures/review/2026-06-26 - unclear voice note.md');
 
-    $index = Storage::disk('local')->get('charliemind/Review/_Review Index.md');
+    $index = Storage::disk('local')->get('charliemind/inbox/mobile-captures/review/_Review Index.md');
 
-    expect(substr_count($index, '[[Review/2026-06-26 - unclear voice note]]'))->toBe(1);
+    expect(substr_count($index, '[[inbox/mobile-captures/review/2026-06-26 - unclear voice note]]'))->toBe(1);
 });
 
-test('review mode off preserves suggested-folder behaviour for low confidence captures', function () {
+test('review mode off still stages low confidence captures without review metadata', function () {
     config(['charliemind.processor_review_mode' => 'off']);
     fakeAiCaptureResult([
         'title' => 'Uncertain Idea',
@@ -430,7 +452,8 @@ test('review mode off preserves suggested-folder behaviour for low confidence ca
     $capture->refresh();
     $markdown = Storage::disk('local')->get('charliemind/'.$capture->processed_markdown_path);
 
-    expect($capture->processed_markdown_path)->toBe('Ideas/2026-06-26 - uncertain idea.md')
+    expect($capture->processed_markdown_path)->toBe('inbox/mobile-captures/review/2026-06-26 - uncertain idea.md')
+        ->and($capture->suggested_path)->toBe('Ideas/2026-06-26 - uncertain idea.md')
         ->and($capture->needs_review)->toBeFalse()
         ->and($capture->review_reason)->toBeNull()
         ->and($markdown)->toContain('needs_review: false')
@@ -443,7 +466,7 @@ test('review list command lists captures that need review', function () {
         'type' => Capture::TYPE_VOICE,
         'status' => Capture::STATUS_PROCESSED,
         'markdown_path' => 'inbox/voice/2026-06-26-161905.md',
-        'processed_markdown_path' => 'Review/2026-06-26 - unclear voice note.md',
+        'processed_markdown_path' => 'inbox/mobile-captures/review/2026-06-26 - unclear voice note.md',
         'needs_review' => true,
         'review_reason' => 'low-confidence',
         'processed_at' => '2026-06-26 17:10:00',
@@ -466,7 +489,7 @@ test('review list command lists captures that need review', function () {
                 '2026-06-26-161905',
                 Capture::TYPE_VOICE,
                 'low-confidence',
-                'Review/2026-06-26 - unclear voice note.md',
+                'inbox/mobile-captures/review/2026-06-26 - unclear voice note.md',
             ]],
         )
         ->assertSuccessful();
@@ -506,8 +529,15 @@ test('ai agent and transcription paths are fakeable', function () {
     $capture->refresh();
 
     expect($capture->transcript)->toBe('Call Dylan about Martin Audio pricing.')
-        ->and($capture->processed_markdown_path)->toBe('Tasks/2026-06-26 - call dylan about martin audio pricing.md')
-        ->and(Storage::disk('local')->get('charliemind/'.$capture->processed_markdown_path))->toContain('## Transcript');
+        ->and($capture->processed_markdown_path)->toBe('inbox/mobile-captures/processed/2026-06-26 - call dylan about martin audio pricing.md')
+        ->and($capture->suggested_path)->toBe('Tasks/2026-06-26 - call dylan about martin audio pricing.md')
+        ->and($capture->media_path)->toBe('inbox/mobile-captures/audio/2026-06-26-161905.m4a')
+        ->and(Storage::disk('local')->get('charliemind/'.$capture->processed_markdown_path))
+        ->toContain('## Transcript')
+        ->toContain('Audio: [[inbox/mobile-captures/audio/2026-06-26-161905.m4a]]');
+
+    Storage::disk('local')->assertExists('charliemind/inbox/audio/2026-06-26-161905.m4a');
+    Storage::disk('local')->assertExists('charliemind/inbox/mobile-captures/audio/2026-06-26-161905.m4a');
 
     CaptureProcessingAgent::assertPrompted(fn ($prompt): bool => $prompt->contains('Call Dylan about Martin Audio pricing.'));
     Transcription::assertGenerated(fn (): bool => true);

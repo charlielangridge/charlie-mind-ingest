@@ -6,21 +6,28 @@ use App\Models\Capture;
 
 class ProcessedNoteRenderer
 {
-    public function render(Capture $capture, CaptureContent $content, CaptureProcessingResult $result, CaptureReviewRoute $reviewRoute): string
-    {
+    public function render(
+        Capture $capture,
+        CaptureContent $content,
+        CaptureProcessingResult $result,
+        CaptureReviewRoute $reviewRoute,
+        string $suggestedPath,
+        ?string $stagedRawPath,
+        ?string $stagedMediaPath,
+    ): string {
         return implode(PHP_EOL.PHP_EOL, array_filter([
-            $this->frontMatter($capture, $result, $reviewRoute),
+            $this->frontMatter($capture, $result, $reviewRoute, $suggestedPath),
             '# '.$result->title,
             $this->reviewTag($reviewRoute),
             $this->summary($result),
             $this->actions($result),
             $this->notes($result),
             $this->transcript($content),
-            $this->source($capture),
+            $this->source($stagedRawPath, $stagedMediaPath),
         ])).PHP_EOL;
     }
 
-    private function frontMatter(Capture $capture, CaptureProcessingResult $result, CaptureReviewRoute $reviewRoute): string
+    private function frontMatter(Capture $capture, CaptureProcessingResult $result, CaptureReviewRoute $reviewRoute, string $suggestedPath): string
     {
         $created = ($capture->captured_at ?? $capture->created_at ?? now())->format('Y-m-d H:i');
         $tags = array_values(array_unique(array_filter($reviewRoute->tags)));
@@ -41,6 +48,8 @@ class ProcessedNoteRenderer
             $lines[] = 'review_reason: '.$reviewRoute->reviewReason;
         }
 
+        $lines[] = 'suggested_folder: '.$this->yamlString($reviewRoute->folder);
+        $lines[] = 'suggested_path: '.$this->yamlString($suggestedPath);
         $lines[] = 'tags:';
 
         foreach ($tags as $tag) {
@@ -98,17 +107,19 @@ class ProcessedNoteRenderer
         return '## Transcript'.PHP_EOL.PHP_EOL.trim($content->transcript);
     }
 
-    private function source(Capture $capture): string
+    private function source(?string $stagedRawPath, ?string $stagedMediaPath): string
     {
-        $lines = [
-            'Original capture: [['.$capture->markdown_path.']]',
-        ];
+        $lines = [];
 
-        if ($capture->media_path !== null) {
-            $lines[] = 'Audio: [['.$capture->media_path.']]';
+        if ($stagedRawPath !== null) {
+            $lines[] = 'Original capture: [['.$stagedRawPath.']]';
         }
 
-        return '## Source'.PHP_EOL.PHP_EOL.implode(PHP_EOL, $lines);
+        if ($stagedMediaPath !== null) {
+            $lines[] = 'Audio: [['.$stagedMediaPath.']]';
+        }
+
+        return $lines === [] ? '' : '## Source'.PHP_EOL.PHP_EOL.implode(PHP_EOL, $lines);
     }
 
     private function yamlString(string $value): string

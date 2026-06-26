@@ -25,10 +25,6 @@ class CaptureReviewRouter
                 $needsReview = true;
                 $reviewReason = 'medium-confidence';
             }
-
-            if ($needsReview && $this->rank($confidence) <= $this->rank($this->threshold())) {
-                $folder = $this->reviewFolder();
-            }
         }
 
         return new CaptureReviewRoute(
@@ -63,11 +59,6 @@ class CaptureReviewRouter
     private function mediumReviewTag(): bool
     {
         return filter_var(config('charliemind.processor_medium_review_tag', true), FILTER_VALIDATE_BOOL);
-    }
-
-    private function reviewFolder(): string
-    {
-        return trim((string) config('charliemind.processor_review_folder', 'Review'), '/') ?: 'Review';
     }
 
     /**

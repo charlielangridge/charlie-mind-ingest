@@ -16,6 +16,7 @@ class CaptureProcessor
         private ProcessedNotePathGenerator $pathGenerator,
         private ReviewIndexWriter $reviewIndexWriter,
         private CharlieMindStorage $storage,
+        private CaptureStagingPaths $stagingPaths,
     ) {}
 
     public function process(Capture $capture, bool $dryRun = false): CaptureProcessingOutcome
@@ -38,7 +39,14 @@ class CaptureProcessor
 
             $result = $this->aiProcessor->process($capture, $content);
             $reviewRoute = $this->reviewRouter->route($capture, $result);
-            $processedPath = $this->pathGenerator->pathFor($capture, $result, $reviewRoute->folder);
+            $suggestedPath = $this->pathGenerator->pathFor($capture, $result, $reviewRoute->folder);
+            $processedPath = $this->pathGenerator->pathFor(
+                $capture,
+                $result,
+                $this->stagingPaths->stagedProcessedFolder($result->confidence),
+            );
+            $stagedRawPath = $this->stagedRawPath($capture);
+            $stagedMediaPath = $this->stagedMediaPath($capture);
 
             if ($dryRun) {
                 return new CaptureProcessingOutcome(
@@ -50,9 +58,20 @@ class CaptureProcessor
                 );
             }
 
+            $this->copyIfAvailable($capture->markdown_path, $stagedRawPath);
+            $this->copyIfAvailable($capture->media_path, $stagedMediaPath);
+
             $this->storage->putVaultFile(
                 $processedPath,
-                $this->renderer->render($capture, $content, $result, $reviewRoute),
+                $this->renderer->render(
+                    $capture,
+                    $content,
+                    $result,
+                    $reviewRoute,
+                    $suggestedPath,
+                    $stagedRawPath,
+                    $stagedMediaPath,
+                ),
             );
 
             $this->reviewIndexWriter->append($capture, $result, $reviewRoute, $processedPath);
@@ -63,7 +82,10 @@ class CaptureProcessor
                 'processed_at' => now(),
                 'summary' => $result->summary,
                 'suggested_title' => $result->title,
+                'suggested_folder' => $reviewRoute->folder,
+                'suggested_path' => $suggestedPath,
                 'suggested_tags' => $reviewRoute->tags,
+                'media_path' => $stagedMediaPath ?? $capture->media_path,
                 'needs_review' => $reviewRoute->needsReview,
                 'review_reason' => $reviewRoute->reviewReason,
                 'transcript' => $content->transcript,
@@ -91,5 +113,28 @@ class CaptureProcessor
                 message: $throwable->getMessage(),
             );
         }
+    }
+
+    private function stagedRawPath(Capture $capture): ?string
+    {
+        if ($capture->markdown_path === null) {
+            return null;
+        }
+
+        return $this->stagingPaths->rawPath($capture);
+    }
+
+    private function stagedMediaPath(Capture $capture): ?string
+    {
+        return $this->stagingPaths->mediaPath($capture);
+    }
+
+    private function copyIfAvailable(?string $from, ?string $to): void
+    {
+        if ($from === null || $to === null || $from === $to || ! $this->storage->exists($from)) {
+            return;
+        }
+
+        $this->storage->copyVaultFile($from, $to);
     }
 }

@@ -2,7 +2,7 @@
 
 CharlieMind Ingest is a small Laravel API for receiving captures from an iPhone Shortcut and writing them into an Obsidian-compatible inbox.
 
-It stores every capture as its own Markdown file, with optional uploaded media saved beside it using stable vault-relative paths. It can also process pending captures into cleaned Obsidian notes. It does not run GitHub sync, an admin panel, a scheduler, or a frontend.
+It stores every capture as its own Markdown file, with optional uploaded media saved beside it using stable vault-relative paths. It can also process pending captures into cleaned Obsidian notes, staged under `inbox/mobile-captures/` for `obsidian-mind` to file later. It does not run GitHub sync, an admin panel, or a frontend.
 
 ## Installation
 
@@ -37,8 +37,13 @@ CAPTURE_PROCESSOR_ARCHIVE_RAW=false
 CAPTURE_PROCESSOR_REVIEW_MODE=confidence
 CAPTURE_PROCESSOR_REVIEW_CONFIDENCE_THRESHOLD=low
 CAPTURE_PROCESSOR_MEDIUM_REVIEW_TAG=true
-CAPTURE_PROCESSOR_REVIEW_FOLDER=Review
-CAPTURE_PROCESSOR_REVIEW_INDEX=Review/_Review Index.md
+CHARLIEMIND_STAGING_ROOT=inbox/mobile-captures
+CHARLIEMIND_STAGING_PROCESSED_FOLDER=inbox/mobile-captures/processed
+CHARLIEMIND_STAGING_REVIEW_FOLDER=inbox/mobile-captures/review
+CHARLIEMIND_STAGING_AUDIO_FOLDER=inbox/mobile-captures/audio
+CHARLIEMIND_STAGING_MEDIA_FOLDER=inbox/mobile-captures/media
+CHARLIEMIND_STAGING_RAW_FOLDER=inbox/mobile-captures/raw
+CHARLIEMIND_STAGING_LOG_FOLDER=inbox/mobile-captures/logs
 ```
 
 `CHARLIEMIND_STORAGE_ROOT=charliemind` writes files under:
@@ -85,16 +90,19 @@ POST /api/exports/mark-complete
 
 ## Obsidian Export Pull Bridge
 
-Processed notes are stored in the configured Laravel Cloud bucket. Obsidian Sync does not read from that bucket directly, so the bridge is:
+Processed notes are stored in the configured Laravel Cloud bucket under vault-relative staging paths. Obsidian Sync does not read from that bucket directly, so the bridge is:
 
 ```text
-Laravel Cloud bucket
+iPhone
+  -> Laravel Cloud ingest
+  -> AI/transcription processor
+  -> bucket staging area
   -> desktop puller
-  -> local Obsidian vault folder
-  -> Obsidian Sync
+  -> Obsidian vault inbox/mobile-captures
+  -> obsidian-mind final filing
 ```
 
-The Laravel app remains the capture and processing system. A local desktop or laptop pulls processed files into the vault. Bucket files are not deleted after export.
+The Laravel app remains the capture and processing system. It suggests where notes should eventually live, but it does not permanently file notes into final vault folders such as `Tasks/` or `Ideas/`. A local desktop or laptop pulls staged files into the vault root, and `obsidian-mind` is responsible for final filing, linking, and organisation. Bucket files are not deleted after export.
 
 ### Export API
 
@@ -115,11 +123,13 @@ The response contains vault-relative paths only:
       "status": "processed",
       "needs_review": true,
       "review_reason": "low-confidence",
-      "processed_markdown_path": "Review/2026-06-26 - unclear voice note.md",
+      "suggested_folder": "Voice",
+      "suggested_path": "Voice/2026-06-26 - unclear voice note.md",
+      "processed_markdown_path": "inbox/mobile-captures/review/2026-06-26 - unclear voice note.md",
       "files": [
         {
           "role": "processed_note",
-          "path": "Review/2026-06-26 - unclear voice note.md",
+          "path": "inbox/mobile-captures/review/2026-06-26 - unclear voice note.md",
           "mime": "text/markdown",
           "size": 2451
         }
@@ -132,7 +142,7 @@ The response contains vault-relative paths only:
 Download one export file:
 
 ```http
-GET /api/exports/file?path=Review%2F2026-06-26%20-%20unclear%20voice%20note.md
+GET /api/exports/file?path=inbox%2Fmobile-captures%2Freview%2F2026-06-26%20-%20unclear%20voice%20note.md
 ```
 
 Mark successfully pulled captures as exported:
@@ -160,6 +170,14 @@ Set your local values:
 CHARLIEMIND_API_URL=https://capture.example.com
 CHARLIEMIND_API_TOKEN=change-me
 CHARLIEMIND_LOCAL_VAULT_PATH=C:\Users\charl\CharlieMind
+```
+
+`CHARLIEMIND_LOCAL_VAULT_PATH` must be the root of the Obsidian vault, not `inbox/` and not `inbox/mobile-captures/`. The puller writes the vault-relative paths returned by the API, creating local files such as:
+
+```text
+C:\Users\charl\CharlieMind\inbox\mobile-captures\processed\...
+C:\Users\charl\CharlieMind\inbox\mobile-captures\review\...
+C:\Users\charl\CharlieMind\inbox\mobile-captures\audio\...
 ```
 
 Run a dry run first:
@@ -297,35 +315,33 @@ The failure is stored on the capture record in `processing_error`.
 
 ### Processed Notes
 
-Processed notes are written as vault-relative Markdown paths such as:
+Processed notes are written to staged vault-relative Markdown paths such as:
 
 ```text
-Tasks/2026-06-26 - call dylan about martin audio pricing.md
-Ideas/2026-06-26 - doorscan queue length estimation.md
-Voice/2026-06-26 - voice note.md
+inbox/mobile-captures/processed/2026-06-26 - call dylan about martin audio pricing.md
+inbox/mobile-captures/processed/2026-06-26 - doorscan queue length estimation.md
+inbox/mobile-captures/review/2026-06-26 - unclear voice note.md
 ```
 
-The database stores these paths in `processed_markdown_path` without the configured storage root.
+The database stores the staged path in `processed_markdown_path` without the configured storage root. It also stores the AI recommendation separately in `suggested_folder` and `suggested_path`, for example `Tasks/2026-06-26 - call dylan about martin audio pricing.md`.
 
-Raw captures are preserved in place. V1 does not delete, move, or archive raw inbox files, even when `CAPTURE_PROCESSOR_ARCHIVE_RAW` is set.
+Raw captures are preserved in place. During processing, raw Markdown and media are copied into the staging folders for export; originals are not deleted, moved, or archived, even when `CAPTURE_PROCESSOR_ARCHIVE_RAW` is set.
 
 ### Review Mode
 
-Review mode protects the permanent vault folders from uncertain processed notes. It is enabled by default with:
+Review mode protects the staged processed folder from uncertain processed notes. It is enabled by default with:
 
 ```env
 CAPTURE_PROCESSOR_REVIEW_MODE=confidence
 CAPTURE_PROCESSOR_REVIEW_CONFIDENCE_THRESHOLD=low
 CAPTURE_PROCESSOR_MEDIUM_REVIEW_TAG=true
-CAPTURE_PROCESSOR_REVIEW_FOLDER=Review
-CAPTURE_PROCESSOR_REVIEW_INDEX=Review/_Review Index.md
 ```
 
 Confidence routing:
 
-- `high` writes directly to the AI-suggested folder.
-- `medium` writes to the AI-suggested folder, adds `needs_review: true`, `review_reason: medium-confidence`, and `#needs-review`.
-- `low` writes to `Review/`, adds `needs_review: true`, `review_reason: low-confidence`, and `#needs-review`.
+- `high` writes to `inbox/mobile-captures/processed/` and stores the AI-suggested final path in metadata.
+- `medium` writes to `inbox/mobile-captures/processed/`, adds `needs_review: true`, `review_reason: medium-confidence`, and `#needs-review`, and stores the AI-suggested final path in metadata.
+- `low` writes to `inbox/mobile-captures/review/`, adds `needs_review: true`, `review_reason: low-confidence`, and `#needs-review`, and stores the AI-suggested final path in metadata.
 
 `CAPTURE_PROCESSOR_REVIEW_CONFIDENCE_THRESHOLD` uses ordered confidence values: `low < medium < high`. The default `low` sends only low-confidence captures to `Review/`. Setting it to `medium` sends low and medium captures to `Review/`.
 
@@ -338,7 +354,7 @@ CAPTURE_PROCESSOR_REVIEW_MODE=off
 The review index is maintained at:
 
 ```text
-Review/_Review Index.md
+inbox/mobile-captures/review/_Review Index.md
 ```
 
 It contains Obsidian wiki-link checklist entries for notes that need review. Review notes manually in Obsidian by opening the index, checking each linked note, editing or moving it as needed, then ticking off the checklist item. This is intentionally not a full approval workflow.
@@ -348,7 +364,7 @@ It contains Obsidian wiki-link checklist entries for notes that need review. Rev
 Each non-dry-run processing pass appends a summary to:
 
 ```text
-inbox/processing-log.md
+inbox/mobile-captures/logs/processing-log.md
 ```
 
 The log is written through `CharlieMindStorage`, so it uses the same configured disk and root as capture files.
@@ -385,6 +401,13 @@ Markdown files and media are saved beneath the CharlieMind storage root:
 ```text
 storage/app/charliemind/
   inbox/
+    mobile-captures/
+      processed/
+      review/
+      audio/
+      media/
+      raw/
+      logs/
     captures/
       quick/
       tasks/
@@ -407,7 +430,7 @@ storage/app/charliemind/
 Paths returned by the API are relative to `storage/app/charliemind`, which means Obsidian embeds can use vault-relative links such as:
 
 ```markdown
-![[inbox/audio/2026-06-26-141233.m4a]]
+![[inbox/mobile-captures/audio/2026-06-26-141233.m4a]]
 ```
 
 ## CharlieMind and Obsidian

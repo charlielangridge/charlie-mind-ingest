@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Capture;
 use App\Services\CaptureProcessingOutcome;
 use App\Services\CaptureProcessor;
+use App\Services\CaptureStagingPaths;
 use App\Services\CharlieMindStorage;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -19,7 +20,7 @@ class CapturesProcessCommand extends Command
     /**
      * Execute the console command.
      */
-    public function handle(CaptureProcessor $processor, CharlieMindStorage $storage): int
+    public function handle(CaptureProcessor $processor, CharlieMindStorage $storage, CaptureStagingPaths $stagingPaths): int
     {
         if (! $this->enabled()) {
             $this->line('Capture processor is disabled.');
@@ -53,7 +54,7 @@ class CapturesProcessCommand extends Command
         $needsReview = collect($outcomes)->where('needsReview', true)->count();
 
         if (! $dryRun) {
-            $this->appendProcessingLog($storage, $outcomes, $processed, $failed, $skipped, $needsReview);
+            $this->appendProcessingLog($storage, $stagingPaths, $outcomes, $processed, $failed, $skipped, $needsReview);
         }
 
         $this->newLine();
@@ -131,7 +132,7 @@ class CapturesProcessCommand extends Command
     /**
      * @param  array<int, CaptureProcessingOutcome>  $outcomes
      */
-    private function appendProcessingLog(CharlieMindStorage $storage, array $outcomes, int $processed, int $failed, int $skipped, int $needsReview): void
+    private function appendProcessingLog(CharlieMindStorage $storage, CaptureStagingPaths $stagingPaths, array $outcomes, int $processed, int $failed, int $skipped, int $needsReview): void
     {
         $lines = [
             '',
@@ -158,6 +159,6 @@ class CapturesProcessCommand extends Command
 
         $lines[] = '';
 
-        $storage->appendVaultFile('inbox/processing-log.md', implode(PHP_EOL, $lines));
+        $storage->appendVaultFile($stagingPaths->logPath(), implode(PHP_EOL, $lines));
     }
 }

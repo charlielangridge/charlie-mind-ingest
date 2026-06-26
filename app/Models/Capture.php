@@ -98,6 +98,8 @@ class Capture extends Model
         'transcript',
         'summary',
         'suggested_title',
+        'suggested_folder',
+        'suggested_path',
         'suggested_tags',
         'needs_review',
         'review_reason',

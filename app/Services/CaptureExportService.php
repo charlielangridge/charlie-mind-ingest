@@ -11,10 +11,11 @@ class CaptureExportService
     public function __construct(
         private CharlieMindStorage $storage,
         private VaultPathValidator $pathValidator,
+        private CaptureStagingPaths $stagingPaths,
     ) {}
 
     /**
-     * @return Collection<int, array{capture_id: string, type: string, status: string, needs_review: bool, review_reason: string|null, processed_markdown_path: string, files: array<int, array{role: string, path: string, mime: string, size: int|null}>}>
+     * @return Collection<int, array{capture_id: string, type: string, status: string, needs_review: bool, review_reason: string|null, suggested_folder: string|null, suggested_path: string|null, processed_markdown_path: string, files: array<int, array{role: string, path: string, mime: string, size: int|null}>}>
      */
     public function pending(int $limit = 50, bool $includeRaw = false): Collection
     {
@@ -34,14 +35,28 @@ class CaptureExportService
             return false;
         }
 
+        if (dirname($path) === $this->stagingPaths->rawFolder()) {
+            $captureId = pathinfo($path, PATHINFO_FILENAME);
+
+            if ($path !== $this->stagingPaths->rawFolder().'/'.$captureId.'.md') {
+                return false;
+            }
+
+            return Capture::query()
+                ->where('status', Capture::STATUS_PROCESSED)
+                ->whereNotNull('processed_at')
+                ->whereNotNull('markdown_path')
+                ->where('capture_id', $captureId)
+                ->exists();
+        }
+
         return Capture::query()
             ->where('status', Capture::STATUS_PROCESSED)
             ->whereNotNull('processed_at')
             ->where(function (Builder $query) use ($path): void {
                 $query
                     ->where('processed_markdown_path', $path)
-                    ->orWhere('media_path', $path)
-                    ->orWhere('markdown_path', $path);
+                    ->orWhere('media_path', $path);
             })
             ->exists();
     }
@@ -103,7 +118,7 @@ class CaptureExportService
     }
 
     /**
-     * @return array{capture_id: string, type: string, status: string, needs_review: bool, review_reason: string|null, processed_markdown_path: string, files: array<int, array{role: string, path: string, mime: string, size: int|null}>}
+     * @return array{capture_id: string, type: string, status: string, needs_review: bool, review_reason: string|null, suggested_folder: string|null, suggested_path: string|null, processed_markdown_path: string, files: array<int, array{role: string, path: string, mime: string, size: int|null}>}
      */
     private function manifestEntry(Capture $capture, bool $includeRaw): array
     {
@@ -118,7 +133,7 @@ class CaptureExportService
         }
 
         if ($includeRaw && is_string($capture->markdown_path)) {
-            $files[] = $this->fileEntry('raw_capture', $capture->markdown_path, 'text/markdown');
+            $files[] = $this->fileEntry('raw_capture', $this->stagingPaths->rawPath($capture), 'text/markdown');
         }
 
         return [
@@ -127,6 +142,8 @@ class CaptureExportService
             'status' => $capture->status,
             'needs_review' => (bool) $capture->needs_review,
             'review_reason' => $capture->review_reason,
+            'suggested_folder' => $capture->suggested_folder,
+            'suggested_path' => $capture->suggested_path,
             'processed_markdown_path' => $capture->processed_markdown_path,
             'files' => array_values(array_filter($files)),
         ];

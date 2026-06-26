@@ -53,7 +53,7 @@ function charliemindPullerOptions(string $vault, bool $dryRun = false, bool $for
     );
 }
 
-function charliemindPullerExport(array $files = [['path' => 'Review/note.md']]): array
+function charliemindPullerExport(array $files = [['path' => 'inbox/mobile-captures/review/note.md']]): array
 {
     return [
         'capture_id' => '2026-06-26-161905',
@@ -73,7 +73,7 @@ test('puller path function rejects unsafe paths', function (?string $path) {
 test('puller dry run does not write files or mark captures exported', function () {
     $vault = charliemindPullerVault();
     $client = new CharlieMindPullerFakeClient([charliemindPullerExport()], [
-        'Review/note.md' => '# Note',
+        'inbox/mobile-captures/review/note.md' => '# Note',
     ]);
 
     $result = (new CharlieMindPuller($client, charliemindPullerOptions($vault, dryRun: true)))->pull();
@@ -81,38 +81,40 @@ test('puller dry run does not write files or mark captures exported', function (
     expect($result['planned'])->toBe(1)
         ->and($result['downloaded'])->toBe(0)
         ->and($client->marked)->toBe([])
-        ->and(is_file($vault.DIRECTORY_SEPARATOR.'Review'.DIRECTORY_SEPARATOR.'note.md'))->toBeFalse();
+        ->and(is_file($vault.DIRECTORY_SEPARATOR.'inbox'.DIRECTORY_SEPARATOR.'mobile-captures'.DIRECTORY_SEPARATOR.'review'.DIRECTORY_SEPARATOR.'note.md'))->toBeFalse();
 });
 
 test('puller does not overwrite existing files unless force is enabled', function () {
     $vault = charliemindPullerVault();
-    mkdir($vault.DIRECTORY_SEPARATOR.'Review', 0775, true);
-    file_put_contents($vault.DIRECTORY_SEPARATOR.'Review'.DIRECTORY_SEPARATOR.'note.md', 'existing');
+    $directory = $vault.DIRECTORY_SEPARATOR.'inbox'.DIRECTORY_SEPARATOR.'mobile-captures'.DIRECTORY_SEPARATOR.'review';
+    mkdir($directory, 0775, true);
+    file_put_contents($directory.DIRECTORY_SEPARATOR.'note.md', 'existing');
 
     $client = new CharlieMindPullerFakeClient([charliemindPullerExport()], [
-        'Review/note.md' => 'new',
+        'inbox/mobile-captures/review/note.md' => 'new',
     ]);
 
     $result = (new CharlieMindPuller($client, charliemindPullerOptions($vault)))->pull();
 
     expect($result['skipped_existing'])->toBe(1)
-        ->and(file_get_contents($vault.DIRECTORY_SEPARATOR.'Review'.DIRECTORY_SEPARATOR.'note.md'))->toBe('existing')
+        ->and(file_get_contents($directory.DIRECTORY_SEPARATOR.'note.md'))->toBe('existing')
         ->and($client->marked)->toBe(['2026-06-26-161905']);
 });
 
 test('puller overwrites existing files with force enabled', function () {
     $vault = charliemindPullerVault();
-    mkdir($vault.DIRECTORY_SEPARATOR.'Review', 0775, true);
-    file_put_contents($vault.DIRECTORY_SEPARATOR.'Review'.DIRECTORY_SEPARATOR.'note.md', 'existing');
+    $directory = $vault.DIRECTORY_SEPARATOR.'inbox'.DIRECTORY_SEPARATOR.'mobile-captures'.DIRECTORY_SEPARATOR.'review';
+    mkdir($directory, 0775, true);
+    file_put_contents($directory.DIRECTORY_SEPARATOR.'note.md', 'existing');
 
     $client = new CharlieMindPullerFakeClient([charliemindPullerExport()], [
-        'Review/note.md' => 'new',
+        'inbox/mobile-captures/review/note.md' => 'new',
     ]);
 
     $result = (new CharlieMindPuller($client, charliemindPullerOptions($vault, force: true)))->pull();
 
     expect($result['downloaded'])->toBe(1)
-        ->and(file_get_contents($vault.DIRECTORY_SEPARATOR.'Review'.DIRECTORY_SEPARATOR.'note.md'))->toBe('new')
+        ->and(file_get_contents($directory.DIRECTORY_SEPARATOR.'note.md'))->toBe('new')
         ->and($client->marked)->toBe(['2026-06-26-161905']);
 });
 
@@ -120,11 +122,11 @@ test('puller only marks captures exported when every required file succeeds', fu
     $vault = charliemindPullerVault();
     $client = new CharlieMindPullerFakeClient([
         charliemindPullerExport([
-            ['path' => 'Review/note.md'],
-            ['path' => 'inbox/audio/missing.m4a'],
+            ['path' => 'inbox/mobile-captures/review/note.md'],
+            ['path' => 'inbox/mobile-captures/audio/missing.m4a'],
         ]),
     ], [
-        'Review/note.md' => '# Note',
+        'inbox/mobile-captures/review/note.md' => '# Note',
     ]);
 
     $result = (new CharlieMindPuller($client, charliemindPullerOptions($vault)))->pull();

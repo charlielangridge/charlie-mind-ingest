@@ -62,6 +62,14 @@ class CharlieMindStorage
         );
     }
 
+    public function copyVaultFile(string $fromVaultRelativePath, string $toVaultRelativePath): bool
+    {
+        return $this->disk()->copy(
+            $this->objectPath($fromVaultRelativePath),
+            $this->objectPath($toVaultRelativePath),
+        );
+    }
+
     public function exists(string $vaultRelativePath): bool
     {
         return $this->disk()->exists($this->objectPath($vaultRelativePath));

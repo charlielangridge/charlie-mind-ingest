@@ -8,6 +8,7 @@ class ReviewIndexWriter
 {
     public function __construct(
         private CharlieMindStorage $storage,
+        private CaptureStagingPaths $stagingPaths,
     ) {}
 
     public function append(Capture $capture, CaptureProcessingResult $result, CaptureReviewRoute $reviewRoute, string $processedPath): void
@@ -34,7 +35,7 @@ class ReviewIndexWriter
 
     private function indexPath(): string
     {
-        return trim((string) config('charliemind.processor_review_index', 'Review/_Review Index.md'), '/') ?: 'Review/_Review Index.md';
+        return $this->stagingPaths->reviewIndexPath();
     }
 
     private function initialContents(): string
