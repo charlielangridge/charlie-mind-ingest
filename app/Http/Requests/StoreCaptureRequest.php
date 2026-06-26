@@ -55,7 +55,7 @@ class StoreCaptureRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $metadata = $this->input('metadata');
+        $metadata = $this->captureInput('metadata');
 
         if (is_string($metadata)) {
             $decodedMetadata = json_decode($metadata, true);
@@ -66,9 +66,18 @@ class StoreCaptureRequest extends FormRequest
         }
 
         $this->merge([
-            'type' => Capture::normalizeType($this->input('type')),
-            'source' => $this->input('source', 'iphone'),
+            'type' => Capture::normalizeType($this->captureInput('type')),
+            'source' => $this->captureInput('source', 'iphone'),
             'metadata' => $metadata,
         ]);
+    }
+
+    private function captureInput(string $key, mixed $default = null): mixed
+    {
+        if ($this->isJson() && $this->json()->has($key)) {
+            return $this->json($key);
+        }
+
+        return $this->input($key, $default);
     }
 }

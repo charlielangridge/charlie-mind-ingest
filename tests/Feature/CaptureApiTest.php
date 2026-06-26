@@ -56,6 +56,35 @@ test('authenticated text capture succeeds', function () {
         ->toContain('Idea for DoorScan');
 });
 
+test('cherri json request captures text payloads at the captures endpoint', function () {
+    $response = $this->postJson('/api/captures', [
+        'type' => 'quick',
+        'title' => 'Shortcut note',
+        'body' => 'Captured through Cherri jsonRequest().',
+        'url' => 'https://example.com/cherri',
+        'source' => 'iphone-shortcut',
+        'captured_at' => '2026-06-26 15:30:00',
+        'metadata' => [
+            'shortcut_action' => 'jsonRequest',
+        ],
+    ], captureAuthHeaders());
+
+    $response
+        ->assertCreated()
+        ->assertJsonPath('capture.type', 'quick');
+
+    $capture = Capture::query()->firstOrFail();
+
+    expect($capture->title)->toBe('Shortcut note')
+        ->and($capture->body)->toBe('Captured through Cherri jsonRequest().')
+        ->and($capture->url)->toBe('https://example.com/cherri')
+        ->and($capture->source)->toBe('iphone-shortcut')
+        ->and($capture->captured_at->format('Y-m-d H:i:s'))->toBe('2026-06-26 15:30:00')
+        ->and($capture->metadata)->toBe([
+            'shortcut_action' => 'jsonRequest',
+        ]);
+});
+
 test('task capture creates a markdown task', function () {
     $response = $this->postJson('/api/captures', [
         'type' => 'task',
@@ -102,6 +131,43 @@ test('voice capture with file stores audio and creates markdown embed', function
     expect(Storage::disk('charliemind')->get($capture->markdown_path))
         ->toContain('![[inbox/audio/'.$capture->capture_id.'.m4a]]')
         ->toContain('#mobile-capture #voice #audio');
+});
+
+test('cherri file request captures multipart payloads and file at the captures endpoint', function () {
+    $file = UploadedFile::fake()->create('meeting-audio.m4a', 200, 'audio/mp4');
+
+    $response = $this->post('/api/captures', [
+        'type' => 'voice',
+        'title' => 'Meeting audio',
+        'body' => 'Discussed capture ingestion.',
+        'source' => 'iphone-shortcut',
+        'captured_at' => '2026-06-26 16:45:00',
+        'metadata' => json_encode([
+            'shortcut_action' => 'fileRequest',
+            'duration_seconds' => 32,
+        ], JSON_THROW_ON_ERROR),
+        'file' => $file,
+    ], captureAuthHeaders());
+
+    $response
+        ->assertCreated()
+        ->assertJsonPath('capture.type', 'voice');
+
+    $capture = Capture::query()->firstOrFail();
+
+    expect($capture->title)->toBe('Meeting audio')
+        ->and($capture->body)->toBe('Discussed capture ingestion.')
+        ->and($capture->source)->toBe('iphone-shortcut')
+        ->and($capture->captured_at->format('Y-m-d H:i:s'))->toBe('2026-06-26 16:45:00')
+        ->and($capture->metadata)->toBe([
+            'shortcut_action' => 'fileRequest',
+            'duration_seconds' => 32,
+        ])
+        ->and($capture->media_original_name)->toBe('meeting-audio.m4a')
+        ->and($capture->media_path)->toBe('inbox/audio/'.$capture->capture_id.'.m4a');
+
+    Storage::disk('charliemind')->assertExists($capture->media_path);
+    Storage::disk('charliemind')->assertExists($capture->markdown_path);
 });
 
 test('photo capture with file stores image and creates markdown embed', function () {
