@@ -35,6 +35,10 @@ class CapturesVerifyFilesCommand extends Command
         foreach ($captures as $capture) {
             $missingFiles += $this->checkPath($storage, $capture->capture_id, 'markdown', $capture->markdown_path);
 
+            if ($capture->processed_markdown_path !== null) {
+                $missingFiles += $this->checkPath($storage, $capture->capture_id, 'processed markdown', $capture->processed_markdown_path);
+            }
+
             if ($capture->media_path !== null) {
                 $missingFiles += $this->checkPath($storage, $capture->capture_id, 'media', $capture->media_path);
             }

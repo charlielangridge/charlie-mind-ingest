@@ -41,6 +41,15 @@ class CharlieMindStorage
         return $this->disk()->put($this->objectPath($vaultRelativePath), $contents);
     }
 
+    public function appendVaultFile(string $vaultRelativePath, string $contents): bool
+    {
+        $currentContents = $this->exists($vaultRelativePath)
+            ? $this->get($vaultRelativePath)
+            : '';
+
+        return $this->putVaultFile($vaultRelativePath, $currentContents.$contents);
+    }
+
     public function putUploadedFile(string $vaultRelativePath, UploadedFile $file): string|false
     {
         $objectPath = $this->objectPath($vaultRelativePath);

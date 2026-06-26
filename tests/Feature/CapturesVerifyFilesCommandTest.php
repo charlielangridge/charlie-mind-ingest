@@ -21,16 +21,19 @@ test('verify files command succeeds when files exist', function () {
         'type' => 'voice',
         'status' => 'pending',
         'markdown_path' => 'inbox/voice/2026-06-26-161905.md',
+        'processed_markdown_path' => 'Voice/2026-06-26 - voice note.md',
         'media_path' => 'inbox/audio/2026-06-26-161905.m4a',
     ]);
 
     Storage::disk('local')->put('charliemind/'.$capture->markdown_path, '# Voice Note');
+    Storage::disk('local')->put('charliemind/'.$capture->processed_markdown_path, '# Processed Voice Note');
     Storage::disk('local')->put('charliemind/'.$capture->media_path, 'audio');
 
     $this->artisan('captures:verify-files --status=pending')
         ->expectsOutput('Using disk: local')
         ->expectsOutput('Using root: charliemind')
         ->expectsOutput('✓ 2026-06-26-161905 markdown exists: charliemind/inbox/voice/2026-06-26-161905.md')
+        ->expectsOutput('✓ 2026-06-26-161905 processed markdown exists: charliemind/Voice/2026-06-26 - voice note.md')
         ->expectsOutput('✓ 2026-06-26-161905 media exists: charliemind/inbox/audio/2026-06-26-161905.m4a')
         ->assertSuccessful();
 });

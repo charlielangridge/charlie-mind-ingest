@@ -31,9 +31,13 @@ class Capture extends Model
 
     public const STATUS_PENDING = 'pending';
 
+    public const STATUS_PROCESSING = 'processing';
+
     public const STATUS_PROCESSED = 'processed';
 
     public const STATUS_FAILED = 'failed';
+
+    public const STATUS_SKIPPED = 'skipped';
 
     public const SUPPORTED_TYPES = [
         self::TYPE_QUICK,
@@ -51,8 +55,10 @@ class Capture extends Model
 
     public const STATUSES = [
         self::STATUS_PENDING,
+        self::STATUS_PROCESSING,
         self::STATUS_PROCESSED,
         self::STATUS_FAILED,
+        self::STATUS_SKIPPED,
     ];
 
     protected $fillable = [
@@ -63,17 +69,26 @@ class Capture extends Model
         'url',
         'source',
         'status',
+        'processing_error',
+        'processing_attempts',
+        'processing_started_at',
         'markdown_path',
+        'processed_markdown_path',
         'media_path',
         'media_mime',
         'media_original_name',
         'metadata',
         'captured_at',
         'processed_at',
+        'transcript',
+        'summary',
+        'suggested_title',
+        'suggested_tags',
     ];
 
     protected $attributes = [
         'status' => self::STATUS_PENDING,
+        'processing_attempts' => 0,
     ];
 
     /**
@@ -83,7 +98,9 @@ class Capture extends Model
     {
         return [
             'metadata' => 'array',
+            'suggested_tags' => 'array',
             'captured_at' => 'datetime',
+            'processing_started_at' => 'datetime',
             'processed_at' => 'datetime',
         ];
     }
